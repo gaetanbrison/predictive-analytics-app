@@ -47,6 +47,54 @@ def img_to_bytes(img_path):
     encoded = base64.b64encode(img_bytes).decode()
     return encoded
 
+st.sidebar.header("Dashboard")
+st.sidebar.markdown("---")
+app_mode = st.sidebar.selectbox('🔎 Select Page',['01 Introduction 🚀','02 Visualization 📊','03 Prediction 🎯'])
+select_dataset =  st.sidebar.selectbox('💾 Select Dataset',["Train","Test","Bu feat","Merged"])
+list_kpi = ['turnover']
+kpi = st.sidebar.selectbox("📈 Select KPI", list_kpi)
+
+@st.cache_data(ttl=60 * 60 * 24)
+def get_chart(data):
+    hover = alt.selection_single(
+        fields=["date"],
+        nearest=True,
+        on="mouseover",
+        empty="none",
+    )
+
+    lines = (
+        alt.Chart(data, title="Evolution of stock prices")
+        .mark_line()
+        .encode(
+            x="date",
+            y=kpi,
+            #color="symbol",
+            # strokeDash="symbol",
+        )
+    )
+
+    # Draw points on the line, and highlight based on selection
+    points = lines.transform_filter(hover).mark_circle(size=65)
+
+    # Draw a rule at the location of the selection
+    tooltips = (
+        alt.Chart(data)
+        .mark_rule()
+        .encode(
+            x="yearmonthdate(date)",
+            y=kpi,
+            opacity=alt.condition(hover, alt.value(0.3), alt.value(0)),
+            tooltip=[
+                alt.Tooltip("date", title="Date"),
+                alt.Tooltip(kpi, title="Price (USD)"),
+            ],
+        )
+        .add_selection(hover)
+    )
+
+    return (lines + points + tooltips).interactive()
+
 
 
 def main():
@@ -85,18 +133,21 @@ st.image(image_edhec, width=250)
 
 
 
-st.sidebar.header("Dashboard")
-st.sidebar.markdown("---")
-app_mode = st.sidebar.selectbox('🔎 Select Page',['01 Introduction 🚀','02 Visualization 📊','03 Prediction 🎯'])
-select_dataset =  st.sidebar.selectbox('💾 Select Dataset',["Train","Test","Bu feat","Merged"])
+
+
 if select_dataset == "Train":
     df = pd.read_csv("datasets/train.csv")
+    st.success(f'You have selected {"Train Dataset"}. Here are the top 5 rows from dataset')
 elif select_dataset == "Test": 
     df = pd.read_csv(".datasets/test.csv")
+    st.success(f'You have selected {"Test Dataset"}. Here are the top 5 rows from dataset')
 elif select_dataset == "Bu feat": 
     df = pd.read_csv("datasets/bu_feat.csv")
+    st.success(f'You have selected {"Bu feat Dataset"}. Here are the top 5 rows from dataset')
 else: 
     df = pd.read_csv("datasets/merged.csv")
+    st.success(f'You have selected {"Merged Dataset"}. Here are the top 5 rows from dataset')
+
 
 if app_mode == '01 Introduction 🚀':
 
@@ -148,6 +199,47 @@ if app_mode == '01 Introduction 🚀':
 
         pr = df.profile_report()
         #st_profile_report(pr)
+
+
+
+if app_mode == '03 Prediction 🎯':
+    df["date"] = df["day_id"]
+    print("Hello World")
+
+    start_date = st.date_input(
+        "Select start date",
+        date(2013, 1, 1),
+        min_value=datetime.strptime("2013-01-01", "%Y-%m-%d"),
+        max_value=datetime.now(),
+    )   
+
+    # example list of strings representing dates
+    date_strings = list(df["date"])
+
+    # empty list to store converted datetime dates
+    dates = []
+
+    # loop through each string and convert to datetime date
+    for date_str in date_strings:
+        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        dates.append(date)
+
+    # print the list of converted dates
+    #print(dates)
+    df["date"] = dates
+    #st.write(type(start_date))
+    #st.write(type(df["day_id"][0]))
+    #st.dataframe(df_master)
+    df = df[df['date'] > pd.to_datetime(start_date)]
+
+    st.subheader(" ")
+    st.subheader("01 - Show  Selected Stocks Time Series ")
+    st.subheader(" ")
+    df_new = df[df["turnover"]<1000000].reset_index(drop=True)
+    df_new_store = df_new[df_new["dpt_num_department"] == 127]
+    chart = get_chart(df_new_store)
+    st.altair_chart((chart).interactive(), use_container_width=True)
+
 
 
 if __name__=='__main__':
