@@ -19,6 +19,7 @@ from pandas import DataFrame
 from prophet import Prophet
 from matplotlib import pyplot
 from sklearn.metrics import mean_absolute_error
+import seaborn as sns
 
 
 sns.set(style="whitegrid")
@@ -79,10 +80,31 @@ def main():
     hide_header_footer()
 
 image_edhec = Image.open('images/decathlon.png')
-st.image(image_edhec, width=200)
+st.image(image_edhec, width=250)
+
+
+
 
 st.sidebar.header("Dashboard")
 st.sidebar.markdown("---")
+app_mode = st.sidebar.selectbox('🔎 Select Page',['01 Introduction 🚀','02 Visualization 📊','03 Prediction 🎯'])
+select_dataset =  st.sidebar.selectbox('💾 Select Dataset',["Train","Test","Bu feat","Merged"])
+if select_dataset == "Train":
+    df = pd.read_csv("datasets/train.csv")
+elif select_dataset == "Test": 
+    df = pd.read_csv(".datasets/test.csv")
+elif select_dataset == "Bu feat": 
+    df = pd.read_csv("datasets/bu_feat.csv")
+else: 
+    df = pd.read_csv("datasets/merged.csv")
+
+
+
+
+
+
+
+
 
 
 
