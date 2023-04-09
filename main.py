@@ -54,8 +54,8 @@ def img_to_bytes(img_path):
 
 st.sidebar.header("Dashboard")
 st.sidebar.markdown("---")
-app_mode = st.sidebar.selectbox('🔎 Select Page',['03 Prediction 🎯','01 Introduction 🚀','02 Visualization 📊',])
-select_dataset =  st.sidebar.selectbox('💾 Select Dataset',["Train","Test","Bu feat","Merged"])
+app_mode = st.sidebar.selectbox('🔎 Select Page',['02 Prediction 🎯','01 Introduction 🚀'])
+select_dataset =  st.sidebar.selectbox('💾 Select Dataset',["Train","Test"])
 list_kpi = ['turnover']
 kpi = st.sidebar.selectbox("📈 Select KPI", list_kpi)
 
@@ -265,7 +265,7 @@ if app_mode == '01 Introduction 🚀':
 
 
 
-if app_mode == '03 Prediction 🎯':
+if app_mode == '02 Prediction 🎯':
     df["date"] = df["day_id"]
     st.subheader(" ")
     st.subheader("01 - Show  Decathlon Time Series ")
@@ -301,7 +301,7 @@ if app_mode == '03 Prediction 🎯':
     df_new_store = df_new[df_new["dpt_num_department"] == depart_val]
     chart = get_chart(df_new_store)
     st.altair_chart((chart).interactive(), use_container_width=True)
-    df_new_store_group = df_new_store.groupby("date").agg({'turnover': 'mean'}).reset_index()
+    df_new_store_group = df_new_store.groupby("date").agg({'turnover': 'sum'}).reset_index()
     chart = get_chart(df_new_store_group)
     st.altair_chart((chart).interactive(), use_container_width=True)
 
