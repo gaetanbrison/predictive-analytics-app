@@ -13,3 +13,4 @@ matplotlib
 plotly
 prophet>=1.1
 streamlit
+statsmodels
