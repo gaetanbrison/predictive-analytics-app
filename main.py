@@ -19,8 +19,19 @@ from pandas import DataFrame
 from prophet import Prophet
 from matplotlib import pyplot
 from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
 import seaborn as sns
-
+from statsmodels.tsa.seasonal import seasonal_decompose
+from prophet import Prophet
+from prophet.diagnostics import cross_validation 
+from prophet.diagnostics import performance_metrics
+from prophet.plot import plot_cross_validation_metric
+import plotly.graph_objs as go
+import plotly
+from prophet.plot import plot_plotly, plot_components_plotly
+import matplotlib.pyplot as plt 
+from dateutil.relativedelta import relativedelta
+import numpy as np
 
 sns.set(style="whitegrid")
 pd.set_option('display.max_rows', 15)
@@ -64,7 +75,7 @@ def get_chart(data):
     )
 
     lines = (
-        alt.Chart(data, title="Evolution of stock prices")
+        alt.Chart(data, title="Evolution of Decathlon Turnover for this specific Department")
         .mark_line()
         .encode(
             x="date",
@@ -95,6 +106,70 @@ def get_chart(data):
 
     return (lines + points + tooltips).interactive()
 
+@st.cache_data(ttl=60 * 60 * 24)
+def comparison_chart(data, title):
+    hover = alt.selection_single(
+        fields=["date"],
+        nearest=True,
+        on="mouseover",
+        empty="none",
+    )
+
+    lines = (
+        alt.Chart(data, title=title)
+        .mark_line()
+        .encode(
+            x="date",
+            y='sales:Q',
+            color="set",
+        )
+    )
+    # Draw points on the line, and highlight based on selection
+    points = lines.transform_filter(hover).mark_circle(size=65)
+
+    # Draw a rule at the location of the selection
+    tooltips = (
+        alt.Chart(data)
+        .mark_rule()
+        .encode(
+            x="date",
+            y='sales:Q',
+            opacity=alt.condition(hover, alt.value(0.3), alt.value(0)),
+            tooltip=[
+                alt.Tooltip("date", title="Date"),
+                alt.Tooltip('sales:Q', title=["Sales ($)"]),
+            ],
+        )
+        .add_selection(hover)
+    )
+
+    return (lines + points + tooltips).interactive()
+
+# functions
+@st.cache_data
+def get_simple_model(df):
+	# df.columns = ['ds','y']
+	m = Prophet(interval_width=0.95)
+	m.fit(df) 
+	return m 
+
+@st.cache_data
+def get_fc_charts(df, start_date, periods):
+	st.write('#### Model predictions')
+	df.columns = ['ds','y']
+	m = get_simple_model(df)
+	future = m.make_future_dataframe(periods=periods, freq = 'MS')
+	forecast = m.predict(future)
+
+	# evaluate the predictions
+	st.write('#### Evaluate model predictions')
+	dates = df['ds'][-periods:].values
+	y_true = df['y'][-periods:].values
+	y_pred = forecast['yhat'][-periods:].values
+
+	# assess the model with MAE
+	mae = mean_absolute_error(y_true, y_pred)
+	st.success('MAE: %.3f' % mae)
 
 
 def main():
@@ -128,7 +203,7 @@ def main():
     hide_header_footer()
 
 image_edhec = Image.open('images/decathlon.png')
-st.image(image_edhec, width=250)
+st.image(image_edhec, width=200)
 
 
 
@@ -136,17 +211,11 @@ st.image(image_edhec, width=250)
 
 
 if select_dataset == "Train":
-    df = pd.read_csv("datasets/train.csv")
+    df = pd.read_csv("datasets/train_merged.csv")
     st.success(f'You have selected {"Train Dataset"}. Here are the top 5 rows from dataset')
-elif select_dataset == "Test": 
-    df = pd.read_csv(".datasets/test.csv")
+else:
+    df = pd.read_csv(".datasets/test_merged.csv")
     st.success(f'You have selected {"Test Dataset"}. Here are the top 5 rows from dataset')
-elif select_dataset == "Bu feat": 
-    df = pd.read_csv("datasets/bu_feat.csv")
-    st.success(f'You have selected {"Bu feat Dataset"}. Here are the top 5 rows from dataset')
-else: 
-    df = pd.read_csv("datasets/merged.csv")
-    st.success(f'You have selected {"Merged Dataset"}. Here are the top 5 rows from dataset')
 
 
 if app_mode == '01 Introduction 🚀':
@@ -204,7 +273,9 @@ if app_mode == '01 Introduction 🚀':
 
 if app_mode == '03 Prediction 🎯':
     df["date"] = df["day_id"]
-    print("Hello World")
+    st.subheader(" ")
+    st.subheader("01 - Show  Decathlon Time Series ")
+    st.subheader(" ")
 
     start_date = st.date_input(
         "Select start date",
@@ -232,14 +303,114 @@ if app_mode == '03 Prediction 🎯':
     #st.dataframe(df_master)
     df = df[df['date'] > pd.to_datetime(start_date)]
 
-    st.subheader(" ")
-    st.subheader("01 - Show  Selected Stocks Time Series ")
-    st.subheader(" ")
-    df_new = df[df["turnover"]<1000000].reset_index(drop=True)
-    df_new_store = df_new[df_new["dpt_num_department"] == 127]
+
+    df_new = df[df["turnover"]<1000000].sample(n=10000).reset_index(drop=True)
+    list_dep = list(df_new["dpt_num_department"].unique())
+    depart_val = st.multiselect("Select a Department Number", list_dep,127)
+    #st.write(depart_val)
+    df_new_store = df_new[df_new["dpt_num_department"] == depart_val[0]]
     chart = get_chart(df_new_store)
     st.altair_chart((chart).interactive(), use_container_width=True)
+    df_new_store_group = df_new_store.groupby("date").agg({'turnover': 'mean'}).reset_index()
+    chart = get_chart(df_new_store_group)
+    st.altair_chart((chart).interactive(), use_container_width=True)
 
+
+
+    st.subheader(" ")
+    st.subheader(f"04 - Decomposition of the {depart_val[0]} Department Time Serie")
+    st.subheader(" ")
+    import time
+    start_time = time.time()
+    df_new_store_group.index = pd.to_datetime(df_new_store_group["date"])
+    df_new_store_group_v2 = df_new_store_group["turnover"]
+
+    df_new_store_group_v2.index = pd.to_datetime(df_new_store_group_v2.index)
+
+    plt.rc('figure',figsize=(14,8))
+    plt.rc('font',size=15)
+    result = seasonal_decompose(df_new_store_group_v2,model='additive', period=12)
+    fig = result.plot()
+    st.pyplot()
+    max_data = max(df_new_store_group_v2.index)
+    min_data = min(df_new_store_group_v2.index)
+    start_date = st.date_input(
+		'Select start date' 
+		,min_data 
+		,min_value = min_data
+		,max_value = max_data
+		)
+    periods = st.slider('Pick a period to forcast (months)', 0, 48,24)
+
+    st.write('#### Model predictions')
+    df_new_store_group.columns = ['ds','y']
+    m = Prophet()
+    m.fit(df_new_store_group)
+    # Make a forecast
+    future = m.make_future_dataframe(periods=8*7, freq='D')
+    forecast = m.predict(future)
+    #st.write(forecast.head(3))
+    #st.write(forecast)
+
+    # Plot the forecast
+    periods = 8*7
+    y_true = df_new_store_group['y'][-periods:].values
+    y_pred = forecast['yhat'][247-periods:247].values
+    dates = forecast['ds'][247-periods:247].values
+    #st.write(y_true)
+    #st.write(len(list(y_true)))
+    #st.write(len(list(y_pred)))
+    #st.write(dates.shape())
+    source = pd.DataFrame({'date':dates, 'Actual':y_true,'Predict':y_pred})
+    source.set_index('date', inplace=True)
+    source = source.reset_index().melt('date', var_name='set', value_name='sales')
+    # plot
+    #chart = comparison_chart(source, "Simple - Prophet's prediction evaluation")
+    st.altair_chart((chart).interactive(), use_container_width=True)
+    # assess the model with MAE
+    mae = mean_absolute_error(y_true, y_pred)
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
+
+    st.markdown("#### Performance metrics 🚀")
+    st.success('MAE: %.3f' % mae)
+    st.success('MSE: %.3f' % mse)
+    st.success('RMSE: %.3f' % rmse)
+
+    st.markdown("#### Execution Time Model ⚙️")
+
+    st.warning("--- %s seconds ---" % (np.round(time.time() - start_time,2)))
+
+    st.markdown("#### Sustainable metrics 🌱")
+
+    from codecarbon import OfflineEmissionsTracker
+    tracker = OfflineEmissionsTracker(country_iso_code="FRA") # FRA = France
+    tracker.start()
+    results = tracker.stop()
+    st.error(' %.12f kWh' % results)
+
+    #st.write(forecast)
+    #fig = model.plot(forecast)
+    #dates = df_new_store_group['ds'][-periods:].values
+
+    #m = get_simple_model(df_new_store_group)
+    #future = m.make_future_dataframe(periods=periods, freq = 'MS')
+    #forecast = m.predict(future)
+    #end_date = datetime.strftime(max_data + relativedelta(months=periods), '%Y-%m-%d').replace(' 0', ' ')
+    # evaluate the predictions
+    #st.write('#### Evaluate model predictions')
+    #dates = df_new_store_group['ds'][-periods:].values
+    #y_true = df_new_store_group['y'][-periods:].values
+    #y_pred = forecast['yhat'][-periods:].values
+    #source = pd.DataFrame({'date':dates, 'Actual':y_true,'Predict':y_pred})
+    #source.set_index('date', inplace=True)
+    #source = source.reset_index().melt('date', var_name='set', value_name='sales')
+    # plot
+    #chart = comparison_chart(source, "Simple - Prophet's prediction evaluation")
+    #st.altair_chart((chart).interactive(), use_container_width=True)
+    # assess the model with MAE
+    #mae = mean_absolute_error(y_true, y_pred)
+    #st.success('MAE: %.3f' % mae)
 
 
 if __name__=='__main__':
