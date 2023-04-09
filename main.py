@@ -1,3 +1,4 @@
+import time
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -42,13 +43,6 @@ st.set_option('deprecation.showPyplotGlobalUse', False)
 
 
 
-
-
-
-
-
-
-
 st.set_page_config(
     page_title="Decathlon - Predictive Analytics App ", layout="wide", page_icon="./images/flask.png"
 )
@@ -60,7 +54,7 @@ def img_to_bytes(img_path):
 
 st.sidebar.header("Dashboard")
 st.sidebar.markdown("---")
-app_mode = st.sidebar.selectbox('🔎 Select Page',['01 Introduction 🚀','02 Visualization 📊','03 Prediction 🎯'])
+app_mode = st.sidebar.selectbox('🔎 Select Page',['03 Prediction 🎯','01 Introduction 🚀','02 Visualization 📊',])
 select_dataset =  st.sidebar.selectbox('💾 Select Dataset',["Train","Test","Bu feat","Merged"])
 list_kpi = ['turnover']
 kpi = st.sidebar.selectbox("📈 Select KPI", list_kpi)
@@ -295,20 +289,16 @@ if app_mode == '03 Prediction 🎯':
         date = datetime.strptime(date_str, '%Y-%m-%d').date()
         dates.append(date)
 
-    # print the list of converted dates
-    #print(dates)
     df["date"] = dates
-    #st.write(type(start_date))
-    #st.write(type(df["day_id"][0]))
-    #st.dataframe(df_master)
+
     df = df[df['date'] > pd.to_datetime(start_date)]
 
 
     df_new = df[df["turnover"]<1000000].sample(n=10000).reset_index(drop=True)
     list_dep = list(df_new["dpt_num_department"].unique())
-    depart_val = st.multiselect("Select a Department Number", list_dep,127)
+    depart_val = st.selectbox("Select a Department Number", [127,88,117,73])
     #st.write(depart_val)
-    df_new_store = df_new[df_new["dpt_num_department"] == depart_val[0]]
+    df_new_store = df_new[df_new["dpt_num_department"] == depart_val]
     chart = get_chart(df_new_store)
     st.altair_chart((chart).interactive(), use_container_width=True)
     df_new_store_group = df_new_store.groupby("date").agg({'turnover': 'mean'}).reset_index()
@@ -318,9 +308,9 @@ if app_mode == '03 Prediction 🎯':
 
 
     st.subheader(" ")
-    st.subheader(f"04 - Decomposition of the {depart_val[0]} Department Time Serie")
+    st.subheader(f"04 - Decomposition of the {depart_val} Department Time Serie")
     st.subheader(" ")
-    import time
+
     start_time = time.time()
     df_new_store_group.index = pd.to_datetime(df_new_store_group["date"])
     df_new_store_group_v2 = df_new_store_group["turnover"]
@@ -332,41 +322,49 @@ if app_mode == '03 Prediction 🎯':
     result = seasonal_decompose(df_new_store_group_v2,model='additive', period=12)
     fig = result.plot()
     st.pyplot()
-    max_data = max(df_new_store_group_v2.index)
-    min_data = min(df_new_store_group_v2.index)
-    start_date = st.date_input(
-		'Select start date' 
-		,min_data 
-		,min_value = min_data
-		,max_value = max_data
-		)
-    periods = st.slider('Pick a period to forcast (months)', 0, 48,24)
+
 
     st.write('#### Model predictions')
     df_new_store_group.columns = ['ds','y']
-    m = Prophet()
+    st.sidebar.write('#### Hyperparameter Tuning 🔬')
+    select_growth = st.sidebar.selectbox("1️⃣ Select Growth Type:",["linear","logistic"])
+    select_seasonality_mode = st.sidebar.selectbox("2️⃣ Select Seasonality Mode:",["additive","multiplicative"])
+    select_changepoint_prior_scale = st.sidebar.slider("3️⃣ Select Flexibility of trend:",0.01,0.10,0.05,0.01)
+    m = Prophet(growth=select_growth,seasonality_mode=select_seasonality_mode,
+                changepoint_prior_scale=select_changepoint_prior_scale,)
     m.fit(df_new_store_group)
+
     # Make a forecast
     future = m.make_future_dataframe(periods=8*7, freq='D')
     forecast = m.predict(future)
-    #st.write(forecast.head(3))
-    #st.write(forecast)
+
 
     # Plot the forecast
     periods = 8*7
     y_true = df_new_store_group['y'][-periods:].values
     y_pred = forecast['yhat'][247-periods:247].values
     dates = forecast['ds'][247-periods:247].values
-    #st.write(y_true)
-    #st.write(len(list(y_true)))
-    #st.write(len(list(y_pred)))
-    #st.write(dates.shape())
-    source = pd.DataFrame({'date':dates, 'Actual':y_true,'Predict':y_pred})
-    source.set_index('date', inplace=True)
-    source = source.reset_index().melt('date', var_name='set', value_name='sales')
-    # plot
-    #chart = comparison_chart(source, "Simple - Prophet's prediction evaluation")
-    st.altair_chart((chart).interactive(), use_container_width=True)
+
+    fig, ax = plt.subplots()
+    ax.plot(dates, y_true, label="Real")
+    ax.plot(dates, y_pred, label="Prediction")
+    ax.set_xlabel("Dates")
+    ax.set_ylabel("Turnover")
+    ax.set_title("Real Values vs Prediction - Turnover")
+    ax.legend()
+    st.pyplot(fig)
+
+    y_pred2 = forecast['yhat'][247:].values
+    dates2 = forecast['ds'][247:].values
+
+    fig2, ax2 = plt.subplots()
+    ax2.plot(dates2, y_pred2, label="Prediction")
+    ax.set_xlabel("Dates")
+    ax.set_ylabel("Prediction")
+    ax.set_title("Forecast 8 weeks - Turnover")
+    ax.legend()
+    st.pyplot(fig2)
+
     # assess the model with MAE
     mae = mean_absolute_error(y_true, y_pred)
     mse = mean_squared_error(y_true, y_pred)
@@ -388,30 +386,6 @@ if app_mode == '03 Prediction 🎯':
     tracker.start()
     results = tracker.stop()
     st.error(' %.12f kWh' % results)
-
-    #st.write(forecast)
-    #fig = model.plot(forecast)
-    #dates = df_new_store_group['ds'][-periods:].values
-
-    #m = get_simple_model(df_new_store_group)
-    #future = m.make_future_dataframe(periods=periods, freq = 'MS')
-    #forecast = m.predict(future)
-    #end_date = datetime.strftime(max_data + relativedelta(months=periods), '%Y-%m-%d').replace(' 0', ' ')
-    # evaluate the predictions
-    #st.write('#### Evaluate model predictions')
-    #dates = df_new_store_group['ds'][-periods:].values
-    #y_true = df_new_store_group['y'][-periods:].values
-    #y_pred = forecast['yhat'][-periods:].values
-    #source = pd.DataFrame({'date':dates, 'Actual':y_true,'Predict':y_pred})
-    #source.set_index('date', inplace=True)
-    #source = source.reset_index().melt('date', var_name='set', value_name='sales')
-    # plot
-    #chart = comparison_chart(source, "Simple - Prophet's prediction evaluation")
-    #st.altair_chart((chart).interactive(), use_container_width=True)
-    # assess the model with MAE
-    #mae = mean_absolute_error(y_true, y_pred)
-    #st.success('MAE: %.3f' % mae)
-
 
 if __name__=='__main__':
     main()
