@@ -98,15 +98,56 @@ elif select_dataset == "Bu feat":
 else: 
     df = pd.read_csv("datasets/merged.csv")
 
+if app_mode == '01 Introduction 🚀':
+
+    st.markdown("### 00 - Show  Dataset")
+    num = st.number_input('No. of Rows', 5, 10)
+    head = st.radio('View from top (head) or bottom (tail)', ('Head', 'Tail'))
+    if head == 'Head':
+        st.dataframe(df.head(num))
+    else:
+        st.dataframe(df.tail(num))
+    
+    st.markdown("Number of rows and columns helps us to determine how large the dataset is.")
+    st.text('(Rows,Columns)')
+    st.write(df.shape)
+
+
+    st.markdown("### 01 - Description")
+    st.dataframe(df.describe())
 
 
 
+    st.markdown("### 02 - Missing Values")
+    st.markdown("Missing values are known as null or NaN values. Missing data tends to **introduce bias that leads to misleading results.**")
+    dfnull = df.isnull().sum()/len(df)*100
+    totalmiss = dfnull.sum().round(2)
+    st.write("Percentage of total missing values:",totalmiss)
+    st.write(dfnull)
+    if totalmiss <= 30:
+        st.success("Looks good! as we have less then 30 percent of missing values.")
+    else:
+        st.warning("Poor data quality due to greater than 30 percent of missing value.")
+        st.markdown(" > Theoretically, 25 to 30 percent is the maximum missing values are allowed, there's no hard and fast rule to decide this threshold. It can vary from problem to problem.")
 
+    st.markdown("### 03 - Completeness")
+    st.markdown(" Completeness is defined as the ratio of non-missing values to total records in dataset.") 
+    # st.write("Total data length:", len(df))
+    nonmissing = (df.notnull().sum().round(2))
+    completeness= round(sum(nonmissing)/len(df),2)
+    st.write("Completeness ratio:",completeness)
+    st.write(nonmissing)
+    if completeness >= 0.80:
+        st.success("Looks good! as we have completeness ratio greater than 0.85.")
+           
+    else:
+        st.success("Poor data quality due to low completeness ratio( less than 0.85).")
 
+    st.markdown("### 04 - Complete Report")
+    if st.button("Generate Report"):
 
-
-
-
+        pr = df.profile_report()
+        #st_profile_report(pr)
 
 
 if __name__=='__main__':
