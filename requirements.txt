@@ -7,7 +7,6 @@ scikit-learn
 scipy
 seaborn
 setuptools
-statsmodel
 numpy
 pandas
 matplotlib
